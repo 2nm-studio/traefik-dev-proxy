@@ -4,7 +4,10 @@ param(
     [string]$ProjectName,
     
     [Parameter(Mandatory=$true)]
-    [string]$Domains
+    [string]$Domains,
+
+    [Parameter(Mandatory=$false)]
+    [string]$TLD = "local"  # Default value is "local"
 )
 
 # Vérifier les droits admin
@@ -18,14 +21,15 @@ if (-not $isAdmin) {
 function Get-TraefikConfig {
     param(
         [string]$Domain,
-        [string]$ServiceName
+        [string]$ServiceName,
+        [string]$ProjectName
     )
     return @"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.$ServiceName.rule=Host(\`"$Domain\`")"
-      - "traefik.http.routers.$ServiceName.tls=true"
-      - "traefik.http.services.$ServiceName.loadbalancer.server.port=80"
+      - "traefik.http.routers.$ProjectName-$ServiceName.rule=Host(\`"$Domain\`")"
+      - "traefik.http.routers.$ProjectName-$ServiceName.tls=true"
+      - "traefik.http.services.$ProjectName-$ServiceName.loadbalancer.server.port=80"
 "@
 }
 
@@ -79,7 +83,7 @@ function Get-ExistingProjectDomains {
     )
     
     $hostContent = Get-Content $HostsFile
-    $pattern = "127\.0\.0\.1\s+([^.\s]+)\.$ProjectName\.2nm"
+    $pattern = "127\.0\.0\.1\s+([^.\s]+)\.$ProjectName\.$TLD"
     $existingDomains = @()
     
     foreach ($line in $hostContent) {
@@ -109,7 +113,7 @@ function Update-HostsFile {
     
     if ($existingDomains.Count -gt 0) {
         Write-Host "`nDomaines existants pour le projet $ProjectName :" -ForegroundColor Yellow
-        $existingDomains | ForEach-Object { Write-Host "- $_.$ProjectName.2nm" -ForegroundColor Gray }
+        $existingDomains | ForEach-Object { Write-Host "- $_.$ProjectName.$TLD" -ForegroundColor Gray }
     }
 
     # Identifier les nouveaux domaines
@@ -127,7 +131,7 @@ function Update-HostsFile {
             # Préparer toutes les nouvelles entrées
             $newEntries = @()
             foreach ($domain in $domainsToAdd) {
-                $fullDomain = "$domain.$ProjectName.2nm"
+                $fullDomain = "$domain.$ProjectName.$TLD"
                 $newEntries += "127.0.0.1      $fullDomain"
                 Write-Host "+ $fullDomain" -ForegroundColor Green
             }
@@ -154,7 +158,7 @@ $domainList = $Domains.Split(',') | ForEach-Object { $_.Trim() }
 
 Write-Host "Configuration pour le projet: $ProjectName" -ForegroundColor Blue
 Write-Host "Nouveaux domaines à configurer:" -ForegroundColor Blue
-$domainList | ForEach-Object { Write-Host "- $_.$ProjectName.2nm" -ForegroundColor Gray }
+$domainList | ForEach-Object { Write-Host "- $_.$ProjectName.$TLD" -ForegroundColor Gray }
 
 # Mettre à jour le fichier hosts et récupérer tous les domaines (existants + nouveaux)
 $allDomains = Update-HostsFile -NewDomains $domainList -ProjectName $ProjectName
@@ -169,9 +173,9 @@ if (-not (Test-Path $certsPath)) {
 # Préparer les domaines complets pour mkcert
 $certDomains = @()
 foreach ($domain in $allDomains) {
-    $certDomains += "$domain.$ProjectName.2nm"
+    $certDomains += "$domain.$ProjectName.$TLD"
 }
-$certDomains += "traefik.2nm"
+$certDomains += "traefik.$TLD"
 
 # Installer le CA root de mkcert
 Write-Host "`nInstallation du certificat root mkcert..." -ForegroundColor Yellow
@@ -206,7 +210,7 @@ $certDomains | ForEach-Object {
 
 Write-Host "`nConfigurations Traefik pour les services :" -ForegroundColor Yellow
 foreach ($domain in $domainList) {
-    $fullDomain = "$domain.$ProjectName.2nm"
+    $fullDomain = "$domain.$ProjectName.$TLD"
     Write-Host "`nPour le domaine $fullDomain :" -ForegroundColor Cyan
-    Write-Host (Get-TraefikConfig -Domain $fullDomain -ServiceName $domain.ToLower()) -ForegroundColor Green
+    Write-Host (Get-TraefikConfig -Domain $fullDomain -ServiceName $domain.ToLower() -ProjectName $ProjectName.ToLower()) -ForegroundColor Green
 }

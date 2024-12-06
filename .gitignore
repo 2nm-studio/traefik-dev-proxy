@@ -1,1 +1,3 @@
 certs/*
+.htpasswd
+go-cli-prompt.md

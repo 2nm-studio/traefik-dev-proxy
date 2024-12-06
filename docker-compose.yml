@@ -10,6 +10,7 @@ services:
   traefik:
     image: traefik:v2.10
     container_name: traefik
+    restart: unless-stopped
     command:
       - "--api.insecure=true"
       - "--providers.docker=true"
@@ -17,21 +18,20 @@ services:
       - "--providers.docker.network=traefik-public"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      # Configuration SSL avec mkcert
       - "--entrypoints.websecure.http.tls=true"
-      - "--tls.certificates.default.certfile=/etc/certs/local-cert.pem"
-      - "--tls.certificates.default.keyfile=/etc/certs/local-key.pem"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"
+      - "8484:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./certs:/etc/certs:ro # Montage des certificats
+      - ./certs:/etc/certs:ro
+      - ./dynamic.yml:/etc/traefik/dynamic.yml:ro
     networks:
       - traefik-public
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.local`)"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.xnm`)"
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.tls=true"
